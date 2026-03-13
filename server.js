@@ -28,6 +28,9 @@ async function run() {
     
     const db = client.db("career-coach");
     app.use("/api/analyze", require("./src/routes/analyze")(db));
+    app.use("/api/interview", require("./src/routes/interview")(db));
+    app.use("/api/auth", require("./src/routes/auth")(db));
+    app.use("/api/admin", require("./src/routes/admin")(db));
  
     // Test route
     app.get("/", (req, res) => {
