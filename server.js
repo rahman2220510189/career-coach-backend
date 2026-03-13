@@ -26,8 +26,9 @@ async function run() {
 
     // Routes define 
     
-    const db = client.db("careerCoach");
-
+    const db = client.db("career-coach");
+    app.use("/api/analyze", require("./src/routes/analyze")(db));
+ 
     // Test route
     app.get("/", (req, res) => {
       res.json({ message: "Career Coach API running ✅" });
