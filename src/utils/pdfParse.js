@@ -11,7 +11,6 @@ const extractTextFromPDF = async (fileBuffer) => {
 
     return data.text;
   } catch (err) {
-    console.error("PDF Parse Error Detail:", err.message);
     throw new Error("Problem extracting text from PDF ❌");
   }
 };
