@@ -1,64 +1,100 @@
 const express = require("express");
+const https = require("https");
+const http = require("http");
 const { buildCVPrompt } = require("../utils/cvPrompt");
 const { callAI } = require("../../config/apiCall");
 const { authMiddleware } = require("../middleware/auth");
 
+const scrapeJobDescription = (url) => {
+  return new Promise((resolve) => {
+    try {
+      const client = url.startsWith("https") ? https : http;
+      const req = client.get(url, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+          "Accept": "text/html,application/xhtml+xml",
+          "Accept-Language": "en-US,en;q=0.9",
+        },
+        timeout: 8000,
+      }, (res) => {
+        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          return scrapeJobDescription(res.headers.location).then(resolve);
+        }
+        let data = "";
+        res.on("data", (chunk) => (data += chunk));
+        res.on("end", () => {
+          try {
+            let cleaned = data
+              .replace(/<script[\s\S]*?<\/script>/gi, "")
+              .replace(/<style[\s\S]*?<\/style>/gi, "")
+              .replace(/<nav[\s\S]*?<\/nav>/gi, "")
+              .replace(/<header[\s\S]*?<\/header>/gi, "")
+              .replace(/<footer[\s\S]*?<\/footer>/gi, "")
+              .replace(/<[^>]+>/g, " ")
+              .replace(/\s{2,}/g, " ")
+              .trim();
+            const maxLen = 4000;
+            if (cleaned.length > maxLen) {
+              const start = Math.floor(cleaned.length * 0.15);
+              cleaned = cleaned.substring(start, start + maxLen);
+            }
+            resolve(cleaned || null);
+          } catch { resolve(null); }
+        });
+      });
+      req.on("error", () => resolve(null));
+      req.on("timeout", () => { req.destroy(); resolve(null); });
+    } catch { resolve(null); }
+  });
+};
+
 module.exports = (db) => {
   const router = express.Router();
 
-  // POST /api/cv/generate
   router.post("/generate", authMiddleware(db), async (req, res) => {
     try {
-      const {
-        personalInfo,
-        experience,
-        education,
-        skills,
-        projects,
-        volunteer,
-        awards,
-        references,
-      } = req.body;
+      const { personalInfo, jobUrl, experience, education, skills, projects, volunteer, awards, references } = req.body;
 
-      // Validation — only name & email required, everything else optional
       if (!personalInfo?.name || !personalInfo?.email) {
-        return res.status(400).json({ error: "Name and email are required ❌" });
+        return res.status(400).json({ error: "Name and email are required" });
       }
 
-      // Build prompt with full data
+      let jobDescription = null;
+      if (jobUrl?.trim()) {
+        console.log("Scraping job URL:", jobUrl);
+        jobDescription = await scrapeJobDescription(jobUrl.trim());
+        console.log(jobDescription ? "Job scraped: " + jobDescription.length + " chars" : "Scrape failed, continuing without");
+      }
+
       const cvData = {
         personalInfo,
+        jobUrl: jobUrl || null,
+        jobDescription,
         experience:  experience  || [],
         education:   education   || [],
         skills:      skills      || { technical: [], soft: [], languages: [], certificates: [] },
         projects:    projects    || [],
         volunteer:   volunteer   || [],
         awards:      awards      || [],
-        references:  references  || [],   // ← optional, included if provided
+        references:  references  || [],
       };
 
       const prompt = buildCVPrompt(cvData);
-
-      // Call AI
-      console.log("🤖 Generating ATS-friendly CV...");
+      console.log("Generating CV...");
       const aiResponse = await callAI(prompt);
       const clean = aiResponse.replace(/```json|```/g, "").trim();
       const result = JSON.parse(clean);
 
-      // Save to MongoDB
       const cvCollection = db.collection("cvs");
       const saved = await cvCollection.insertOne({
         userId: req.user._id,
         ...result,
         rawData: cvData,
+        jobUrl: jobUrl || null,
         createdAt: new Date(),
       });
 
-      res.json({
-        success: true,
-        cvId: saved.insertedId,
-        data: result,
-      });
+      res.json({ success: true, cvId: saved.insertedId, data: result });
 
     } catch (err) {
       console.error("CV Generate Error:", err.message);
@@ -66,61 +102,41 @@ module.exports = (db) => {
     }
   });
 
-  // GET /api/cv/my-cvs — Get all CVs of logged in user
   router.get("/my-cvs", authMiddleware(db), async (req, res) => {
     try {
-      const cvCollection = db.collection("cvs");
-      const cvs = await cvCollection
+      const cvs = await db.collection("cvs")
         .find({ userId: req.user._id })
         .sort({ createdAt: -1 })
         .toArray();
-
       res.json({ success: true, data: cvs });
-
     } catch (err) {
-      console.error("Get CVs Error:", err.message);
       res.status(500).json({ error: err.message });
     }
   });
 
-  // GET /api/cv/:id — Get single CV
   router.get("/:id", authMiddleware(db), async (req, res) => {
     try {
       const { ObjectId } = require("mongodb");
-      const cvCollection = db.collection("cvs");
-
-      const cv = await cvCollection.findOne({
+      const cv = await db.collection("cvs").findOne({
         _id: new ObjectId(req.params.id),
         userId: req.user._id,
       });
-
-      if (!cv) {
-        return res.status(404).json({ error: "CV not found ❌" });
-      }
-
+      if (!cv) return res.status(404).json({ error: "CV not found" });
       res.json({ success: true, data: cv });
-
     } catch (err) {
-      console.error("Get CV Error:", err.message);
       res.status(500).json({ error: err.message });
     }
   });
 
-  // DELETE /api/cv/:id — Delete CV
   router.delete("/:id", authMiddleware(db), async (req, res) => {
     try {
       const { ObjectId } = require("mongodb");
-      const cvCollection = db.collection("cvs");
-
-      await cvCollection.deleteOne({
+      await db.collection("cvs").deleteOne({
         _id: new ObjectId(req.params.id),
         userId: req.user._id,
       });
-
-      res.json({ success: true, message: "CV deleted ✅" });
-
+      res.json({ success: true, message: "CV deleted" });
     } catch (err) {
-      console.error("Delete CV Error:", err.message);
       res.status(500).json({ error: err.message });
     }
   });
