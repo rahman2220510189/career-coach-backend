@@ -32,6 +32,7 @@ async function run() {
     app.use("/api/auth", require("./src/routes/auth")(db));
     app.use("/api/admin", require("./src/routes/admin")(db));
     app.use("/api/cv", require("./src/routes/cv")(db));
+    app.use("/api/contact", require("./src/routes/contact")(db));
  
     // Test route
     app.get("/", (req, res) => {
