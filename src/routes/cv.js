@@ -3,7 +3,7 @@ const https = require("https");
 const http = require("http");
 const { buildCVPrompt } = require("../utils/cvPrompt");
 const { callAI } = require("../../config/apiCall");
-const { authMiddleware } = require("../middleware/auth");
+const { authMiddleware } = require("../Middleware/auth");
 
 const scrapeJobDescription = (url) => {
   return new Promise((resolve) => {
