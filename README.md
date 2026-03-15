@@ -9,7 +9,7 @@
 
 **REST API for CareerCoach — AI-powered career mentoring platform.**
 
-[🌐 Live API](https://career-coach-backend-system.onrender.com) · [📹 Demo Video](https://drive.google.com/file/d/1WiuW_TjeFPRltJBahFV5ypGXcFcs2lba/view?usp=drive_link) · [🎨 Frontend Repo](https://github.com/rahman2220510189/career_coach)
+[🌐 Live API](https://career-coach-backend-system.onrender.com) · [📹 Demo Video](https://drive.google.com/file/d/1LwdI9IZ2dAzteOhqkvgQfUxRVXHhMstv/view?usp=drive_link) · [🎨 Frontend Repo](https://github.com/rahman2220510189/career_coach)
 
 </div>
 
